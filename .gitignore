@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Alembic bytecode
+alembic-migrations/versions/*.pyc
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Media / large files
+*.mov
+*.mp4
