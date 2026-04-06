@@ -20,6 +20,10 @@ class IndicatorResponse(BaseModel):
     rsi: float | None
     macd: MACDSchema | None
     bollinger: BollingerSchema | None
+    ema: float | None
+    sma: float | None
+    adx: float | None
+    obv: float | None
     signal: str                  # BUY / SELL / HOLD
     confidence: float            # 0.0 – 1.0
     reasons: list[str]

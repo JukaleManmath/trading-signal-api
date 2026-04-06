@@ -10,7 +10,7 @@ from app.services.providers.base import BaseProvider, PriceFetchResult
 
 logger = logging.getLogger(__name__)
 
-BINANCE_URL = "https://api.binance.us/api/v3/ticker/price"
+BINANCE_URL = "https://api.binance.us/api/v3/klines"
 MAX_RETRIES = 3
 
 
@@ -35,7 +35,7 @@ class BinanceProvider(BaseProvider):
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(
                         BINANCE_URL,
-                        params={"symbol": binance_symbol},
+                        params={"symbol": binance_symbol, "interval": "1m", "limit": 1},
                     )
                     if response.status_code == 400:
                         raise HTTPException(
@@ -45,7 +45,8 @@ class BinanceProvider(BaseProvider):
                     response.raise_for_status()
                     data = response.json()
 
-                price = float(data["price"])
+                candle = data[0]
+                price = float(candle[4])
                 if price <= 0:
                     raise HTTPException(
                         status_code=404,
@@ -59,6 +60,10 @@ class BinanceProvider(BaseProvider):
                     timestamp=datetime.now(tz=timezone.utc),
                     provider=self.name,
                     raw_json=json.dumps(data),
+                    open=float(candle[1]),
+                    high=float(candle[2]),
+                    low=float(candle[3]),
+                    volume=float(candle[5]),
                 )
 
             except HTTPException:

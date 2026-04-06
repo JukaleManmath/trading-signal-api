@@ -105,6 +105,10 @@ class PriceService:
             price=fetch_result.price,
             timestamp=fetch_result.timestamp,
             raw_data_id=raw_entry.id,
+            open=fetch_result.open,
+            high=fetch_result.high,
+            low=fetch_result.low,
+            volume=fetch_result.volume
         ))
         await self.db.commit()
         logger.info(f"[DB] Stored price point for {fetch_result.symbol} @ {fetch_result.timestamp}")

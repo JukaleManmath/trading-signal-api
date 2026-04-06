@@ -62,6 +62,10 @@ class AlphaVantageProvider(BaseProvider):
                     timestamp=datetime.strptime(latest_ts_str, "%Y-%m-%d %H:%M:%S"),
                     provider=self.name,
                     raw_json=json.dumps(data),
+                    open=float(latest["1. open"]),
+                    high=float(latest["2. high"]),
+                    low=float(latest["3. low"]),
+                    volume=float(latest["5. volume"])
                 )
 
             except HTTPException:

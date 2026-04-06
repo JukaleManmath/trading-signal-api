@@ -2,12 +2,14 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_async_db
+from app.models.price_points import PricePoint
 from app.schemas.analytics import IndicatorResponse, RiskResponse
 from app.services.risk_engine import RiskEngine
-from app.services.signal_generator import SignalGenerator
+from app.services.signal_generator import SignalGenerator, StrategyMode
 from app.services.technical_analysis import TechnicalAnalysisService
 
 logger = logging.getLogger(__name__)
@@ -18,13 +20,16 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def get_indicators(
     symbol: str,
     provider: str = Query(default="finnhub"),
+    strategy: StrategyMode = Query(default=StrategyMode.TREND_FOLLOWING),
     db: AsyncSession = Depends(get_async_db),
 ) -> IndicatorResponse:
     """
-    Compute RSI, MACD, and Bollinger Bands for a symbol, then generate a BUY/SELL/HOLD signal.
+    Compute RSI, MACD, Bollinger, EMA, SMA, ADX, OBV for a symbol, then generate a signal.
 
-    Requires at least 35 price points in the DB for full MACD computation.
-    RSI needs 15, Bollinger needs 20. Indicators with insufficient data return null.
+    strategy: trend-following | mean-reversion | caution (default: trend-following)
+
+    Requires at least 35 price points for full MACD. RSI needs 15, Bollinger/EMA/SMA need 20,
+    ADX needs 15 with H/L data, OBV needs 2 with volume data. Insufficient indicators return null.
     """
     symbol = symbol.upper()
 
@@ -40,8 +45,6 @@ async def get_indicators(
         current_price = indicators.bollinger.middle  # fallback; will be overridden below
 
     # Fetch the actual latest price from the DB
-    from sqlalchemy import select, desc
-    from app.models.price_points import PricePoint
     result = await db.execute(
         select(PricePoint.price)
         .where(PricePoint.symbol == symbol, PricePoint.provider == provider)
@@ -52,7 +55,7 @@ async def get_indicators(
     if latest is not None:
         current_price = float(latest)
 
-    signal_result = SignalGenerator().generate(indicators, current_price)
+    signal_result = SignalGenerator().generate(indicators, current_price, strategy)
 
     return IndicatorResponse(
         symbol=symbol,
@@ -71,6 +74,10 @@ async def get_indicators(
             }
             if indicators.bollinger else None
         ),
+        ema=indicators.ema,
+        sma=indicators.sma,
+        adx=indicators.adx,
+        obv=indicators.obv,
         signal=signal_result.signal.value,
         confidence=signal_result.confidence,
         reasons=signal_result.reasons,

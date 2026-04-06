@@ -54,6 +54,10 @@ class FinnhubProvider(BaseProvider):
                     timestamp=datetime.utcfromtimestamp(data["t"]),
                     provider=self.name,
                     raw_json=json.dumps(data),
+                    open=float(data["o"]),
+                    high=float(data["h"]),
+                    low=float(data["l"]),
+                    volume=None
                 )
 
             except HTTPException:

@@ -12,10 +12,14 @@ class PriceFetchResult:
     layer and PriceService — no string-key lookups, no silent KeyErrors.
     """
     symbol: str
-    price: float
-    timestamp: datetime   # already parsed — providers own the format conversion
+    price: float              # close price
+    timestamp: datetime       # already parsed — providers own the format conversion
     provider: str
-    raw_json: str         # serialised raw API response, stored in raw_market_data
+    raw_json: str             # serialised raw API response, stored in raw_market_data
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    volume: float | None = None
 
 
 class BaseProvider(ABC):

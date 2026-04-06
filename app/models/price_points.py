@@ -14,6 +14,10 @@ class PricePoint(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     provider = Column(String, nullable=False)
     raw_data_id = Column(UUID(as_uuid=True), ForeignKey("raw_market_data.id"))
+    open = Column(Float, nullable=True)
+    high = Column(Float, nullable=True)
+    low = Column(Float, nullable=True)
+    volume = Column(Float, nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", "timestamp"),
