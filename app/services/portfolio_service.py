@@ -36,6 +36,10 @@ class PortfolioService:
     # Portfolio CRUD
     # ------------------------------------------------------------------
 
+    async def list_portfolios(self) -> list[Portfolio]:
+        result = await self.db.execute(select(Portfolio).order_by(Portfolio.created_at.desc()))
+        return list(result.scalars().all())
+
     async def create_portfolio(self, name: str, portfolio_type: str = "stock") -> Portfolio:
         portfolio = Portfolio(name=name, portfolio_type=portfolio_type)
         self.db.add(portfolio)

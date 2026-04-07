@@ -24,6 +24,13 @@ def _service(db: AsyncSession = Depends(get_async_db)) -> PortfolioService:
     return PortfolioService(db=db, cache=redis_client)
 
 
+@router.get("", response_model=list[PortfolioResponse])
+async def list_portfolios(
+    service: PortfolioService = Depends(_service),
+) -> list[PortfolioResponse]:
+    return await service.list_portfolios()
+
+
 @router.post("", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
 async def create_portfolio(
     body: CreatePortfolioRequest,

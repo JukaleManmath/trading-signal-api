@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.models.alerts import Alert
 from app.models.position import Position
 from app.models.price_points import PricePoint
+from app.services.webhook_service import async_dispatch_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,6 @@ class RiskEngine:
         breach_names = [a.anomaly_type for a in breach_alerts]
 
         if breach_alerts:
-            from app.services.webhook_service import async_dispatch_alerts
             await async_dispatch_alerts(breach_alerts, self._db)
 
         return RiskResult(
