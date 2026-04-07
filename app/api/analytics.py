@@ -105,6 +105,8 @@ async def get_portfolio_risk(
         sharpe_ratio=result.sharpe_ratio,
         max_drawdown=result.max_drawdown,
         correlation_matrix=result.correlation_matrix,
+        rolling_volatility=result.rolling_volatility,
+        breaches=result.breaches,
         symbols_analysed=result.symbols_analysed,
         warning=result.warning,
     )

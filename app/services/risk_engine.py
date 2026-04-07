@@ -12,13 +12,16 @@ All maths uses numpy / scipy.
 """
 import logging
 from dataclasses import dataclass, field
-from uuid import UUID
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 import numpy as np
 from scipy.stats import norm
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.models.alerts import Alert
 from app.models.position import Position
 from app.models.price_points import PricePoint
 
@@ -28,6 +31,7 @@ MIN_PERIODS = 30        # minimum daily price points required per symbol
 RISK_FREE_RATE = 0.0    # annualised; set to e.g. 0.05 for 5%
 TRADING_DAYS = 252      # annualisation factor for Sharpe
 VAR_CONFIDENCE = 0.95   # 95% confidence interval
+VOLATILITY_WINDOW = 20  # rolling window for volatility calculation (days)
 
 
 @dataclass
@@ -38,6 +42,8 @@ class RiskResult:
     sharpe_ratio: float | None
     max_drawdown: float | None          # e.g. -0.23 means -23% worst drawdown
     correlation_matrix: dict | None     # {symbol: {symbol: correlation}}
+    rolling_volatility: float | None    # annualised rolling std dev of portfolio returns
+    breaches: list[str] = field(default_factory=list)   # names of thresholds breached
     symbols_analysed: list[str] = field(default_factory=list)
     warning: str | None = None          # set when data is insufficient
 
@@ -57,6 +63,7 @@ class RiskEngine:
                 sharpe_ratio=None,
                 max_drawdown=None,
                 correlation_matrix=None,
+                rolling_volatility=None,
                 warning="No active positions in portfolio",
             )
 
@@ -86,6 +93,7 @@ class RiskEngine:
                 sharpe_ratio=None,
                 max_drawdown=None,
                 correlation_matrix=None,
+                rolling_volatility=None,
                 warning=f"No position has {MIN_PERIODS}+ price points. Collect more data first.",
             )
 
@@ -103,6 +111,23 @@ class RiskEngine:
         sharpe = self._sharpe_ratio(returns_matrix, weight_vec)
         max_dd = self._max_drawdown(returns_matrix, weight_vec)
         corr = self._correlation_matrix(returns_matrix, symbols)
+        rolling_vol = self._rolling_volatility(returns_matrix, weight_vec)
+
+        breach_alerts = await self._check_thresholds(
+            portfolio_id=portfolio_id,
+            total_value=total_value,
+            var_1day=var_1day,
+            max_dd=max_dd,
+            rolling_vol=rolling_vol,
+            weight_vec=weight_vec,
+            symbols=symbols,
+        )
+
+        breach_names = [a.anomaly_type for a in breach_alerts]
+
+        if breach_alerts:
+            from app.services.webhook_service import async_dispatch_alerts
+            await async_dispatch_alerts(breach_alerts, self._db)
 
         return RiskResult(
             portfolio_id=str(portfolio_id),
@@ -111,6 +136,8 @@ class RiskEngine:
             sharpe_ratio=round(sharpe, 4),
             max_drawdown=round(max_dd, 4),
             correlation_matrix=corr,
+            rolling_volatility=round(rolling_vol, 4) if rolling_vol is not None else None,
+            breaches=breach_names,
             symbols_analysed=symbols,
         )
 
@@ -214,6 +241,120 @@ class RiskEngine:
 
         drawdowns = (cumulative - running_max) / running_max
         return float(drawdowns.min())  # most negative value = worst drawdown
+
+    def _rolling_volatility(
+        self,
+        returns: np.ndarray,
+        weights: np.ndarray,
+    ) -> float | None:
+        """
+        Annualised rolling volatility of the portfolio over the last VOLATILITY_WINDOW days.
+
+        Steps:
+        1. Compute portfolio returns as weighted sum of individual returns.
+        2. Take the last VOLATILITY_WINDOW observations.
+        3. Std dev of that window * sqrt(252) to annualise.
+
+        Returns None if there are fewer observations than the window size.
+        """
+        portfolio_returns = returns @ weights
+        if len(portfolio_returns) < VOLATILITY_WINDOW:
+            return None
+        recent = portfolio_returns[-VOLATILITY_WINDOW:]
+        return float(np.std(recent, ddof=1) * np.sqrt(TRADING_DAYS))
+
+    async def _check_thresholds(
+        self,
+        portfolio_id: UUID,
+        total_value: float,
+        var_1day: float,
+        max_dd: float,
+        rolling_vol: float | None,
+        weight_vec: np.ndarray,
+        symbols: list[str],
+    ) -> list[Alert]:
+        """
+        Compare computed metrics against configured thresholds.
+        For each breach, persist an Alert row and return all created alerts.
+
+        portfolio_id is stored as the alert symbol so the dashboard can filter
+        risk alerts by portfolio. provider is set to 'risk_engine'.
+        """
+        alerts: list[Alert] = []
+        portfolio_str = str(portfolio_id)
+        now = datetime.now(tz=timezone.utc)
+
+        # VaR breach: var as fraction of portfolio value exceeds threshold
+        if total_value > 0 and (var_1day / total_value) > settings.risk_var_threshold:
+            alert = Alert(
+                id=uuid4(),
+                symbol=portfolio_str,
+                provider="risk_engine",
+                anomaly_type="var_breach",
+                severity="high",
+                price=total_value,
+                timestamp=now,
+            )
+            self._db.add(alert)
+            alerts.append(alert)
+            logger.warning("risk_breach_var", extra={"portfolio_id": portfolio_str, "var": var_1day})
+
+        # Drawdown breach: max drawdown worse than threshold (more negative)
+        if max_dd < settings.risk_drawdown_threshold:
+            alert = Alert(
+                id=uuid4(),
+                symbol=portfolio_str,
+                provider="risk_engine",
+                anomaly_type="drawdown_breach",
+                severity="high",
+                price=total_value,
+                timestamp=now,
+            )
+            self._db.add(alert)
+            alerts.append(alert)
+            logger.warning("risk_breach_drawdown", extra={"portfolio_id": portfolio_str, "drawdown": max_dd})
+
+        # Concentration breach: any single position exceeds threshold weight
+        for i, symbol in enumerate(symbols):
+            if float(weight_vec[i]) > settings.risk_concentration_threshold:
+                alert = Alert(
+                    id=uuid4(),
+                    symbol=portfolio_str,
+                    provider="risk_engine",
+                    anomaly_type="concentration_breach",
+                    severity="medium",
+                    price=total_value,
+                    timestamp=now,
+                )
+                self._db.add(alert)
+                alerts.append(alert)
+                logger.warning(
+                    "risk_breach_concentration",
+                    extra={"portfolio_id": portfolio_str, "symbol": symbol, "weight": float(weight_vec[i])},
+                )
+                break  # one alert per portfolio compute, not per symbol
+
+        # Volatility breach: rolling annualised volatility exceeds threshold
+        if rolling_vol is not None and rolling_vol > settings.risk_volatility_threshold:
+            alert = Alert(
+                id=uuid4(),
+                symbol=portfolio_str,
+                provider="risk_engine",
+                anomaly_type="volatility_breach",
+                severity="medium",
+                price=total_value,
+                timestamp=now,
+            )
+            self._db.add(alert)
+            alerts.append(alert)
+            logger.warning("risk_breach_volatility", extra={"portfolio_id": portfolio_str, "vol": rolling_vol})
+
+        if alerts:
+            await self._db.commit()
+            for alert in alerts:
+                await self._db.refresh(alert)
+
+        return alerts
 
     def _correlation_matrix(
         self,

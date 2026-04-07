@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     webhook_max_retries: int = 3
     webhook_timeout_seconds: int = 10
 
+    # Risk threshold settings — breach fires an alert + webhook dispatch.
+    # VaR threshold: fraction of portfolio value (e.g. 0.05 = 5%)
+    # Drawdown threshold: negative fraction (e.g. -0.20 = -20% worst drawdown)
+    # Concentration threshold: single position weight (e.g. 0.40 = 40% of portfolio)
+    # Volatility threshold: annualised rolling std dev (e.g. 0.25 = 25%)
+    risk_var_threshold: float = 0.05
+    risk_drawdown_threshold: float = -0.20
+    risk_concentration_threshold: float = 0.40
+    risk_volatility_threshold: float = 0.25
+
     class Config:
         env_file = ".env"
 

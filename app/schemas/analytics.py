@@ -33,9 +33,11 @@ class IndicatorResponse(BaseModel):
 class RiskResponse(BaseModel):
     portfolio_id: str
     total_value: float
-    var_1day_95: float | None    # dollar loss at 95% confidence
+    var_1day_95: float | None        # dollar loss at 95% confidence
     sharpe_ratio: float | None
-    max_drawdown: float | None   # e.g. -0.23 = worst 23% drawdown
+    max_drawdown: float | None       # e.g. -0.23 = worst 23% drawdown
     correlation_matrix: dict | None
+    rolling_volatility: float | None # annualised rolling std dev of portfolio returns
+    breaches: list[str]              # threshold breach types detected this compute
     symbols_analysed: list[str]
     warning: str | None

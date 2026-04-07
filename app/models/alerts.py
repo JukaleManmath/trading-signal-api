@@ -27,7 +27,11 @@ class Alert(Base):
     symbol = Column(String, nullable=False)
     provider = Column(String, nullable=False)
     anomaly_type = Column(
-        SqlEnum("zscore_spike", "zscore_drop", "ma_crossover", name="anomalytype", create_type=False),
+        SqlEnum(
+            "zscore_spike", "zscore_drop", "ma_crossover",
+            "var_breach", "drawdown_breach", "concentration_breach", "volatility_breach",
+            name="anomalytype", create_type=False,
+        ),
         nullable=False,
     )
     severity = Column(

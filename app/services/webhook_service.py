@@ -137,3 +137,78 @@ def _send_with_retry(webhook: Webhook, alert: Alert) -> None:
         "webhook_dispatch_exhausted",
         extra={"url": webhook.url, "alert_id": str(alert.id)},
     )
+
+
+# ---------------------------------------------------------------------------
+# Async dispatch — called from the risk engine (runs on FastAPI event loop)
+# ---------------------------------------------------------------------------
+
+
+async def async_dispatch_alerts(alerts: list[Alert], db: AsyncSession) -> None:
+    """
+    Called by RiskEngine after threshold breach alerts are persisted.
+    Uses httpx.AsyncClient so it does not block the event loop.
+    """
+    if not alerts:
+        return
+
+    result = await db.execute(
+        select(Webhook).where(
+            Webhook.is_active.is_(True),
+            Webhook.event_type == "alert.created",
+        )
+    )
+    webhooks = list(result.scalars().all())
+    if not webhooks:
+        return
+
+    async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
+        for alert in alerts:
+            for webhook in webhooks:
+                if webhook.symbol and webhook.symbol != alert.symbol.upper():
+                    continue
+                if webhook.min_severity:
+                    alert_rank = _SEVERITY_RANK.get(alert.severity, 0)
+                    min_rank = _SEVERITY_RANK.get(webhook.min_severity, 0)
+                    if alert_rank < min_rank:
+                        continue
+                await _async_send_with_retry(client, webhook, alert)
+
+
+async def _async_send_with_retry(
+    client: httpx.AsyncClient,
+    webhook: Webhook,
+    alert: Alert,
+) -> None:
+    payload = _build_payload(alert)
+    body_bytes = json.dumps(payload).encode()
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if webhook.secret:
+        sig = hmac.new(webhook.secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        headers["X-Webhook-Signature"] = f"sha256={sig}"
+
+    for attempt in range(1, settings.webhook_max_retries + 1):
+        try:
+            resp = await client.post(webhook.url, content=body_bytes, headers=headers)
+            resp.raise_for_status()
+            logger.info(
+                "webhook_dispatched",
+                extra={"url": webhook.url, "alert_id": str(alert.id), "attempt": attempt},
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "webhook_dispatch_failed",
+                extra={
+                    "url": webhook.url,
+                    "alert_id": str(alert.id),
+                    "attempt": attempt,
+                    "error": str(exc),
+                },
+            )
+
+    logger.error(
+        "webhook_dispatch_exhausted",
+        extra={"url": webhook.url, "alert_id": str(alert.id)},
+    )
