@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     ca_weight_ema: float = 0.15
     ca_weight_obv: float = 0.10
 
+    webhook_max_retries: int = 3
+    webhook_timeout_seconds: int = 10
+
     class Config:
         env_file = ".env"
 

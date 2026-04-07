@@ -13,6 +13,7 @@ from app.api.portfolios import router as portfolios_router
 from app.api.prices import router as price_router
 from app.api.stream import router as stream_router
 from app.api.signals import router as signal_router
+from app.api.webhooks import router as webhook_router
 from app.core.kafka_broadcaster import start_broadcaster
 from app.core.logging import setup_logging
 from app.kafka.producer import producer
@@ -56,3 +57,4 @@ app.include_router(portfolios_router)
 app.include_router(analytics_router)
 app.include_router(stream_router)
 app.include_router(signal_router)
+app.include_router(webhook_router)

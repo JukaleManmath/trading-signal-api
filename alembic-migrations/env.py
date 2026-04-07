@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.database.base import Base
 from app.core.config import settings
 from app.models import raw_market_data, price_points, polling_jobs, moving_average
+from app.models.webhook import Webhook  # noqa: F401
 from sqlalchemy import create_engine
 
 # this is the Alembic Config object, which provides

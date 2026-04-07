@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.database.session import SessionLocal
 from app.services.anomaly_detector import AnomalyDetector
+from app.services.webhook_service import dispatch_alerts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def start_consumer() -> None:
                 )
                 if alerts:
                     logger.info(f"[AnomalyConsumer] {len(alerts)} alert(s) stored for {data['symbol']}")
+                    dispatch_alerts(alerts, db)
             finally:
                 db.close()
 
