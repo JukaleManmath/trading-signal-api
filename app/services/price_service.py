@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.metrics import CACHE_HITS, CACHE_MISSES, INGESTION_LATENCY
 from app.kafka.producer import send_price_event
 from app.models.price_points import PricePoint
 from app.models.raw_market_data import RawMarketData
@@ -56,9 +58,11 @@ class PriceService:
         cached_time = datetime.fromisoformat(data["timestamp"])
         if datetime.utcnow() - cached_time < self._freshness:
             logger.info(f"[CACHE HIT] {symbol}")
+            CACHE_HITS.labels(symbol=symbol).inc()
             return data
 
         logger.info(f"[CACHE STALE] {symbol}")
+        CACHE_MISSES.labels(symbol=symbol).inc()
         return None
 
     async def _get_from_db(self, symbol: str) -> dict | None:
@@ -159,12 +163,17 @@ class PriceService:
             return result
 
         # Tier 2: DB (recent price_points)
+        CACHE_MISSES.labels(symbol=symbol).inc()
         result = await self._get_from_db(symbol)
         if result:
             return result
 
         # Tier 3: external API via injected provider
+        t0 = time.monotonic()
         fetch_result = await self.provider.fetch(symbol)
+        INGESTION_LATENCY.labels(provider=self.provider.name, symbol=symbol).observe(
+            time.monotonic() - t0
+        )
         raw_data_id = await self._persist(fetch_result)
         result = self._build_result_dict(symbol, fetch_result.price, fetch_result.timestamp)
         await self._write_to_cache(symbol, result)

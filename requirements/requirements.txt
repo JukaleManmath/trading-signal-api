@@ -31,3 +31,4 @@ numpy
 scipy
 aiokafka
 streamlit
+prometheus-client

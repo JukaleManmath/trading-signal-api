@@ -84,6 +84,7 @@ services:
         condition: service_healthy
     env_file:
       - ../.env
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -106,6 +107,7 @@ services:
         condition: service_healthy
     env_file:
       - ../.env
+    stop_grace_period: 60s
 
   anomaly_consumer:
     build:
@@ -122,6 +124,7 @@ services:
         condition: service_healthy
     env_file:
       - ../.env
+    stop_grace_period: 60s
 
   streamlit:
     build:

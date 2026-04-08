@@ -1,371 +1,257 @@
-# 📈 Systematic Trading Signal & Risk API
+# Systematic Trading Signal & Risk API
 
-> **A real-time backend platform for systematic signal generation, portfolio risk monitoring, and anomaly alerting.**
-
----
-
-## 🚀 Overview
-
-**Systematic Trading Signal & Risk API** is a backend-first platform that ingests live financial market data, processes it through an event-driven pipeline, computes trading signals and portfolio risk metrics, and delivers real-time alerts via APIs and webhooks.
-
-This system is designed as **middleware between market data providers and trading strategies**, enabling developers and traders to integrate signal generation and risk monitoring into their applications without building the infrastructure from scratch.
+A backend platform for real-time trading signal generation, portfolio risk monitoring, and anomaly alerting — built as the intelligence layer between market data providers and trading strategies.
 
 ---
 
-## 🎯 Problem
+## What It Does
 
-Retail algorithmic traders and small prop desks face a fundamental challenge:
-
-* Market data APIs provide **raw price feeds**, not actionable insights
-* Risk monitoring systems are either **expensive or internal-only**
-* Building signal + risk infrastructure requires **months of engineering effort**
-* Most tools are **fragmented** (data, charts, execution — but no unified backend layer)
-
-As a result:
-
-* Traders operate without real-time risk visibility
-* Strategies lack systematic signal generation
-* Systems cannot react to anomalies or volatility spikes in time
+- Ingests live price data from Finnhub, Alpha Vantage, and Binance US
+- Streams events through Kafka into an async processing pipeline
+- Generates composite BUY / SELL / HOLD signals using technical indicators with configurable weighted scoring
+- Computes portfolio-level risk metrics (VaR, Sharpe Ratio, drawdown, rolling volatility)
+- Detects price anomalies via Z-score and moving average divergence
+- Fires webhook alerts on anomalies and risk threshold breaches
+- Exposes all data via REST and WebSocket APIs
+- Provides an operator dashboard built in Streamlit
 
 ---
 
-## 💡 Solution
-
-This project provides a **plug-and-play backend service** that:
-
-* Ingests real-time market data (stocks + crypto)
-* Generates composite trading signals using technical indicators
-* Computes portfolio-level risk metrics continuously
-* Detects anomalies and volatility spikes
-* Pushes alerts via webhooks
-* Exposes all functionality via REST and WebSocket APIs
-
----
-
-## 🧠 Key Capabilities
-
-### 📊 Real-Time Data Pipeline
-
-* Multi-provider ingestion (Finnhub, Binance US)
-* Event streaming via Kafka
-* Partitioned PostgreSQL storage (time-based)
-* Redis caching for low-latency reads
-* WebSocket streaming for live updates
-
----
-
-### ⚡ Signal Engine
-
-Generates **BUY / SELL / HOLD signals** using a composite indicator model:
-
-* Trend: EMA / SMA
-* Momentum: MACD, RSI
-* Volatility: Bollinger Bands
-* Trend strength: ADX
-* Volume confirmation: OBV
-
-Each signal includes:
-
-* Confidence score
-* Indicator breakdown
-* Timestamped audit record
-
-> Signals are computed using **multiple complementary indicators**, since individual indicators are not reliable in isolation.
-
----
-
-### 📉 Risk Engine
-
-Continuously evaluates portfolio-level risk:
-
-* Portfolio value & P&L
-* Parametric VaR (95%)
-* Sharpe ratio
-* Maximum drawdown
-* Rolling volatility
-* Correlation matrix
-
-Supports **threshold-based alerts**:
-
-* VaR exceeding limits
-* Drawdown breaches
-* Concentration risk
-* Volatility spikes
-
----
-
-### 🚨 Anomaly Detection
-
-Detects unusual market behavior:
-
-* Z-score outliers (3σ / 4σ)
-* Moving average divergence
-* Bollinger band breakouts
-* Volume anomalies
-
-Triggers:
-
-* Real-time alerts
-* Webhook notifications
-* Persistent anomaly logs
-
----
-
-### 🔔 Alerting System
-
-* Webhook-based event delivery
-* Push-based architecture (no polling required)
-* Supports:
-
-  * signal triggers
-  * anomaly alerts
-  * risk threshold breaches
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-Market Data Providers (Finnhub, Binance US)
-   ↓
-Ingestion Layer (FastAPI + Async Polling Workers)
-   ↓
-Kafka (price-events topic)
-   ↓
-Kafka Consumers
-   ├── Moving Average Service  →  PostgreSQL
-   └── Anomaly Detector        →  PostgreSQL + Webhook Dispatcher → Registered Webhooks
+Market Data Providers (Finnhub, Alpha Vantage, Binance US)
+        |
+Ingestion Layer — FastAPI async polling workers
+        |
+Kafka  (price-events topic)
+        |
+        +-- MA Consumer        --> PostgreSQL
+        +-- Anomaly Consumer   --> PostgreSQL + Webhook Dispatcher --> Registered Webhooks
 
-PostgreSQL (Partitioned Storage)
-   ↑── Signal Engine   (on-demand per API request, persists to signal_history)
-   ↑── Risk Engine     (on-demand per API request)
+PostgreSQL (partitioned by month)
+        ^-- Signal Engine    (on-demand via API, persists to signal_history)
+        ^-- Risk Engine      (on-demand via API, fires breach alerts)
 
-Redis (Caching Layer)
+Redis   (TTL cache + consumer dedup)
 
-REST + WebSocket + Webhook APIs
+REST API + WebSocket API + Webhook delivery
+
+Streamlit Operator Dashboard
 ```
 
 ---
 
-## ⚙️ Tech Stack
+## Tech Stack
 
-### Backend
-
-* FastAPI (async)
-* SQLAlchemy (async ORM)
-* Kafka (confluent_kafka / aiokafka)
-* PostgreSQL (partitioned tables)
-* Redis
-
-### Infra
-
-* Docker (multi-container setup)
-* Kafka + Zookeeper
-* Adminer (DB UI)
-
-### Data Processing
-
-* NumPy / SciPy (risk calculations)
-* Async background workers
+| Layer | Technology |
+|---|---|
+| API | FastAPI, Uvicorn, WebSockets |
+| ORM | SQLAlchemy (async) |
+| Database | PostgreSQL 15 (partitioned tables) |
+| Cache | Redis 7 |
+| Messaging | Apache Kafka (confluent-kafka, aiokafka) |
+| Numerics | NumPy, SciPy |
+| HTTP client | httpx (async webhook delivery) |
+| Dashboard | Streamlit |
+| Metrics | Prometheus client |
+| Infrastructure | Docker Compose |
 
 ---
 
-## 📡 APIs
+## Signal Engine
 
-### Market Data
+Signals are generated using a weighted composite scoring model across five indicators:
 
-* `GET /prices/latest`
-* `GET /prices/history`
-* `WS /prices/stream`
+| Indicator | Trend-Following | Mean-Reversion | Caution |
+|---|:-:|:-:|:-:|
+| MACD | 0.30 | 0.15 | 0.20 |
+| EMA | 0.25 | 0.10 | 0.15 |
+| OBV | 0.20 | 0.05 | 0.10 |
+| RSI | 0.15 | 0.35 | 0.25 |
+| Bollinger Bands | 0.10 | 0.35 | 0.30 |
 
-### Signals
+ADX acts as a regime modifier — it amplifies signals in trending markets and dampens them in ranging markets. Weights are configurable via environment variables and validated to sum to 1.0 on startup.
 
-* `GET /signals/{symbol}`
-* `GET /signals/history`
-
-### Risk
-
-* `GET /portfolio/{id}/risk`
-* `GET /portfolio/{id}/metrics`
-
-### Alerts & Webhooks
-
-* `GET /alerts`
-* `POST /alerts/{id}/acknowledge`
-* `POST /webhooks`
-* `GET /webhooks`
-* `DELETE /webhooks/{id}`
-
-### Admin / Health
-
-* `GET /health`
-* `GET /admin/workers`
-* `GET /admin/providers`
-
----
-
-## 🧩 Indicator Framework
-
-Indicators are grouped by function:
-
-**MVP (Phase 2)**
-
-| Category       | Indicators              |
-| -------------- | ----------------------- |
-| Trend          | SMA, EMA, MACD          |
-| Momentum       | RSI                     |
-| Volatility     | Bollinger Bands         |
-| Volume         | OBV                     |
-| Trend Strength | ADX                     |
-
-**V2 (after core is stable)**
-
-| Category       | Indicators                          |
-| -------------- | ----------------------------------- |
-| Momentum       | Stochastic Oscillator               |
-| Volume         | Accumulation/Distribution Line      |
-| Trend          | Aroon                               |
-| Structure      | Fibonacci Retracement, Ichimoku     |
-
-> The system combines indicators instead of relying on a single signal, improving robustness.
-
----
-
-## 📊 Signal Generation Model
-
-Signals are computed using a **composite scoring system**:
-
-Example:
-
-* EMA trend → bullish signal
-* MACD crossover → momentum signal
-* RSI oversold → reversal signal
-* OBV divergence → confidence adjustment
-* ADX → trend strength weighting
-
-### Output
-
+**Output:**
 ```json
 {
   "symbol": "AAPL",
   "signal": "BUY",
-  "confidence": 78,
+  "confidence": 0.74,
   "strategy_mode": "trend-following",
   "indicators": {
-    "ema": "bullish",
-    "macd": "bullish crossover",
-    "rsi": "oversold recovery",
-    "adx": "strong trend",
-    "obv": "confirming"
+    "macd": 0.65,
+    "ema": 0.80,
+    "obv": 0.70,
+    "rsi": 0.55,
+    "bollinger": 0.60
   },
-  "timestamp": "2026-04-04T12:00:00Z"
+  "timestamp": "2026-04-07T10:30:00Z"
 }
 ```
 
 ---
 
-## 📉 Risk Metrics
+## Risk Metrics
 
-| Metric       | Description                   |
-| ------------ | ----------------------------- |
-| VaR (95%)    | Expected worst-case loss      |
-| Sharpe Ratio | Risk-adjusted return          |
-| Max Drawdown | Largest peak-to-trough loss   |
-| Volatility   | Standard deviation of returns |
-| Correlation  | Asset interdependence         |
+| Metric | Description |
+|---|---|
+| Parametric VaR (95%) | Expected worst-case loss at 95% confidence |
+| Sharpe Ratio | Risk-adjusted return |
+| Max Drawdown | Largest peak-to-trough loss in history |
+| Rolling Volatility | 20-day annualised standard deviation |
+| Correlation Matrix | Asset interdependence across portfolio |
 
----
-
-## 🖥️ Minimal Operator UI (Streamlit)
-
-### 1. Signal Monitor
-
-* Symbol → Signal → Confidence → Indicator breakdown
-
-### 2. Portfolio Risk Dashboard
-
-* VaR gauge
-* Sharpe ratio
-* Drawdown visualization
-* Correlation heatmap
-
-### 3. Anomaly Feed
-
-* Real-time alerts
-* Severity levels
-* Acknowledge / resolve actions
+Risk threshold breaches automatically create alerts and dispatch webhooks.
 
 ---
 
-## 🔥 Production Features
+## API Reference
 
-* Idempotent Kafka consumers
-* Retry + dead-letter queue (DLQ)
-* Structured logging
-* Redis cache strategy (TTL + invalidation)
-* Graceful shutdown
-* Health checks
-* Load-tested pipeline
+### Prices
+```
+GET  /prices/latest?symbol=AAPL&provider=finnhub
+GET  /prices/history?symbol=AAPL&provider=finnhub
+POST /prices/poll          body: { symbols, provider, interval }
+DEL  /prices/poll/{job_id}
+WS   /ws/prices/{symbol}
+```
 
----
+### Signals
+```
+GET /signals/{symbol}?strategy=trend-following
+GET /signals/{symbol}/history
+```
 
-## 🛠️ Build Plan
+### Analytics
+```
+GET /analytics/{symbol}/indicators?strategy=trend-following
+GET /analytics/portfolios/{id}/risk
+```
 
-### Phase 1
+### Portfolios
+```
+GET  /portfolios
+POST /portfolios
+GET  /portfolios/{id}
+POST /portfolios/{id}/positions
+GET  /portfolios/{id}/snapshot
+```
 
-* Data ingestion + Kafka + storage
+### Alerts & Webhooks
+```
+GET  /alerts/active
+POST /alerts/{id}/resolve
+POST /webhooks
+GET  /webhooks
+DEL  /webhooks/{id}
+```
 
-### Phase 2
-
-* Signal engine (EMA, MACD, RSI, Bollinger, ADX, OBV)
-
-### Phase 3
-
-* Portfolio risk engine
-
-### Phase 4
-
-* Anomaly detection + alerting
-
-### Phase 5
-
-* Operator dashboard (Streamlit)
-
-### Phase 6
-
-* Production hardening (metrics, retries, scaling)
-
----
-
-## 🎯 Use Cases
-
-* Algorithmic trading systems
-* Portfolio monitoring tools
-* Fintech backend infrastructure
-* Risk monitoring services
-* Trading bots
-
----
-
-## 📌 Positioning
-
-### One-line
-
-**Backend infrastructure for real-time trading signals and portfolio risk monitoring**
-
-### Analogy
-
-> What Alpaca provides for execution, this system provides for **signals + risk intelligence**
+### Health & Metrics
+```
+GET /health    — postgres, redis, consumer lag
+GET /metrics   — Prometheus exposition format
+```
 
 ---
 
-## ⚠️ Disclaimer
+## Getting Started
 
-This system provides analytical signals and risk metrics.
-It does not guarantee trading outcomes and should not be used as financial advice.
+### Prerequisites
+
+- Docker and Docker Compose
+- API keys for [Finnhub](https://finnhub.io) and/or [Alpha Vantage](https://www.alphavantage.co)
+
+### Setup
+
+**1. Clone the repository**
+```bash
+git clone https://github.com/manmathjukale/trading-signal-api.git
+cd trading-signal-api
+```
+
+**2. Configure environment**
+```bash
+cp .env.example .env
+# Edit .env and fill in your API keys and database credentials
+```
+
+**3. Start all services**
+```bash
+docker compose -f docker/docker-compose.yml --env-file .env up --build
+```
+
+**4. Run migrations**
+```bash
+docker exec -it trading-api alembic upgrade head
+```
+
+**5. Verify**
+```bash
+curl http://localhost:8000/health
+```
+
+Services available:
+- API: `http://localhost:8000`
+- Streamlit dashboard: `http://localhost:8501`
+- Adminer (DB UI): `http://localhost:8080`
+- Prometheus metrics: `http://localhost:8000/metrics`
 
 ---
 
-## 👨‍💻 Author
+## Environment Variables
 
-**Manmath Jukale**
+```bash
+# Database
+DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/trading
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB=
+
+# Redis
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+
+# Market data providers
+FINNHUB_API_KEY=
+ALPHA_VANTAGE_API_KEY=
+
+# Signal weights (optional — defaults enforce sum=1.0 per strategy)
+TF_WEIGHT_MACD=0.30
+TF_WEIGHT_EMA=0.25
+# ... see .env.example for full list
+```
+
+---
+
+## Production Features
+
+- **Idempotent consumers** — Redis SETNX deduplication prevents double-processing on consumer restart
+- **Retry + DLQ** — Failed messages retried 3x with exponential backoff; unrecoverable messages routed to `price-events-dlq`
+- **Graceful shutdown** — SIGTERM handler lets consumers finish the current message before exiting
+- **Docker stop grace period** — 60s for consumers, 30s for API, preventing mid-flight kills
+- **Prometheus metrics** — Ingestion latency histogram, Redis hit/miss counters, consumer lag gauge at `/metrics`
+- **Webhook HMAC signing** — `X-Webhook-Signature: sha256=...` on every delivery
+- **Partitioned PostgreSQL** — `price_points` partitioned by month for query performance at scale
+
+---
+
+## Dashboard Screenshots
+
+> Screenshots stored in [`screenshots/`](screenshots/)
+
+---
+
+## Disclaimer
+
+This system provides analytical signals and risk metrics for research and educational purposes. It does not constitute financial advice and does not guarantee trading outcomes.
+
+---
+
+## Author
+
+**Manmath Jukale** — [GitHub](https://github.com/manmathjukale) · [LinkedIn](https://linkedin.com/in/jukalemanmath)

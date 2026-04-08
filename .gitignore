@@ -1,23 +1,58 @@
 # Python
-venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pyw
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
 
 # Environment variables
 .env
 .env.*
 !.env.example
 
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Alembic bytecode
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Alembic compiled files
+alembic-migrations/versions/__pycache__/
 alembic-migrations/versions/*.pyc
 
 # Claude Code
@@ -27,3 +62,8 @@ CLAUDE.md
 # Media / large files
 *.mov
 *.mp4
+*.zip
+*.tar.gz
+
+# Docker volumes (if accidentally created locally)
+postgres_data/

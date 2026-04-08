@@ -12,4 +12,11 @@ kafka-topics --bootstrap-server kafka:9092 \
              --replication-factor 1 \
              --partitions 1
 
-echo "Kafka topic 'price-events' created (if not already existing)"
+kafka-topics --bootstrap-server kafka:9092 \
+             --create \
+             --if-not-exists \
+             --topic price-events-dlq \
+             --replication-factor 1 \
+             --partitions 1
+
+echo "Kafka topics 'price-events' and 'price-events-dlq' created (if not already existing)"
